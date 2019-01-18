@@ -3,6 +3,11 @@
  * Author: erco
  *
  * Test interrupts on PIC16f1709: blinks LED at 1Hz on output pin B6.
+ * This code specifically builds for MPLABX with XC8 version 2.x.
+ * Note XC8 v2.x changed the syntax of interrupt function declarations:
+ *
+ *    OLD: void interrupt isr(void) {      // nice old syntax..
+ *    NEW: void __interrupt() isr(void) {  // weird new syntax in XC8 v2.x
  * 
  * Created on January 17, 2019, 1:49 AM
  */
@@ -40,8 +45,7 @@ int G_icount = 0;                 // timer0 interrupt counter
 int G_intspersec;                 // #ints per second (recalculated by GetIntsPerSec())
 
 // Interrupt service routine
-//void interrupt isr(void) {      // (nice old syntax to declare int service)
-void __interrupt() isr(void) {    // (weird new syntax MPLABX 5.10 w/XC8 v2.x to declare int service)
+void __interrupt() isr(void) {
     if ( INTCONbits.TMR0IF ) {    // int timer overflow?
         INTCONbits.TMR0IF = 0;    // clear bit for next overflow
         if ( G_icount++ == G_intspersec ) {
