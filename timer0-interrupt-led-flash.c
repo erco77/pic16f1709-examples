@@ -1,3 +1,4 @@
+// vim: autoindent tabstop=8 shiftwidth=4 expandtab softtabstop=4
 /*
  * File:   main.c
  * Author: erco
@@ -11,6 +12,7 @@
  * 
  * Created on January 17, 2019, 1:49 AM
  */
+
 // This must be #defined before #includes
 #define _XTAL_FREQ 500000UL       // system oscillator speed in HZ (__delay_ms() needs this)
 #define FOSC4 (_XTAL_FREQ/4)      // instruction clock is 1/4 XTAL speed
@@ -42,7 +44,7 @@
 #include <pic16f1709.h>
 
 int G_icount = 0;                 // timer0 interrupt counter
-int G_intspersec;                 // #ints per second (recalculated by GetIntsPerSec())
+int G_intspersec;                 // #ints per second (calculated by SetTimerSpeed())
 
 // Interrupt service routine
 void __interrupt() isr(void) {
@@ -56,13 +58,6 @@ void __interrupt() isr(void) {
     }
 }
 
-// Return # ints per second, given current clock freq and prescaler
-//    Assumes internal xtal w/instruction clock
-//
-int GetIntsPerSec(int prescaler) {
-    return FOSC4 / prescaler / 256;
-}
-
 // See p.76 of PIC16F1709 data sheet for other values for OSCCON IRCF<3:0> -erco
 #define CPU_CLK_16MHZ  0b1111
 #define CPU_CLK_4MHZ   0b1101
@@ -73,16 +68,39 @@ int GetIntsPerSec(int prescaler) {
 //                          \\_ IRCF2    |    OSCCON register
 //                           \_ IRCF3   /
 
+// Set the cpu clock speed
+//     'val' should be one of the CPU_CLK_XXX macros defined above.
+//
+void SetCpuClockSpeed(int val) {
+    OSCCONbits.IRCF = val;
+}
+
 // See p.xx of PIC16F1709 data sheet for other values for PS -erco
 #define PS_256  0b111
 #define PS_128  0b110
+#define PS_64   0b101
+#define PS_32   0b100
+#define PS_16   0b011
+#define PS_8    0b010
 #define PS_4    0b001
 #define PS_2    0b000
 //                 \\\_ PS0 \    Together these are
 //                  \\_ PS1  |-- the PS bits of the
 //                   \_ PS2 /    OPTION_REG.
+
+// Set the timer0 speed (timer0 prescaler value).
+//     'val' must be one of the PS_### macros defined above.
+//     Sets hardware and adjusts G_intspersec automatically.
+//
+void SetTimerSpeed(int val) {
+    OPTION_REGbits.PS = val;                 // set PreScaler (PS) value hardware bits
+    int prescaler = 2 << (val & 0b111);      // convert harware bits to actual divisor value (2,4,8..128,256)
+    G_intspersec = FOSC4 / prescaler / 256;  // set G_intspersec based on prescaler. Assumes _XTAL_FREQ set correctly
+}
+
 void Init() {
-    OSCCONbits.IRCF = CPU_CLK_500KHZ;  // Sets cpu xtal clock speed. If changed, update _XTAL_FREQ @top of file!
+    // Set internal clock's cpu speed
+    SetCpuClockSpeed(CPU_CLK_500KHZ);   // Set cpu xtal clock speed first. If changed, update _XTAL_FREQ @top of file!
     // Initialize for use of TMR0 interrupts
     INTCONbits.GIE        = 1;          // Global Interrupt Enable (GIE)
     INTCONbits.PEIE       = 1;          // PEripheral Interrupt Enable (PEIE)
@@ -92,14 +110,14 @@ void Init() {
     OPTION_REGbits.TMR0CS = 0;          // set timer 0 Clock Source (CS) to the internal instruction clock
     OPTION_REGbits.TMR0SE = 0;          // Select Edge (SE) to be rising (0=rising edge, 1=falling edge)
     OPTION_REGbits.PSA    = 0;          // PreScaler Assignment (PSA) (0=assigned to timer0, 1=not assigned to timer0)
-    // Set timer0 prescaler speed, and set global ints-per-second accordingly
-    OPTION_REGbits.PS     = PS_256;     // PreScaler value. If changed, update GetIntsPerSec() argument! (below)
-    G_intspersec = GetIntsPerSec(256);
+    // Set timer0 prescaler speed
+    SetTimerSpeed(PS_256);              // Sets OPTION_REG's PS value, and calculates G_intspersec
     // Configure digital I/O for all outputs
     TRISA  = 0x0;
     TRISB  = 0x0;
     TRISC  = 0x0;
-    ADCON0 = 0x0; // disable analog i/o
+    // Disable analog I/O
+    ADCON0 = 0x0;
 }
 
 void main(void) {
